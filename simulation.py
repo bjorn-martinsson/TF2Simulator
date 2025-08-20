@@ -212,10 +212,8 @@ class Hook_Base:
     
     # Player is in a position to jumpbug
     def player_jumpbug_possible(self, player): pass
-    # Player is in a position to crouch bounce
-    def player_crouched_bounce_possible(self, player): pass
     # Player is in a position to standing bounce (bhop)
-    def player_standing_bounce_possible(self, player): pass
+    def player_bhop_possible(self, player): pass
     # Player hit a jump bug
     def player_jumpbug_detected(self, player): pass
     # Player hit a bhop
@@ -252,6 +250,9 @@ class Hook_Base:
     
     # Soldier hit speed shot (ducked, grounded and moving at high speed)
     def soldier_ss_detected(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
+    # Soldier is in a position to bounce with a rocket
+    def soldier_crouched_bounce_possible(self, player): pass
+    def soldier_standing_bounce_possible(self, player): pass
     # Soldier was hit by rocket while being between 1.0 and 2.0 units from floor
     def soldier_crouched_bounce_detected(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
     def soldier_standing_bounce_detected(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
@@ -351,7 +352,7 @@ class Player:
             key_state,
             hook = None,
             
-            pos = [0., 0., COORD_RESOLUTION], 
+            pos = [0., 0., 0.], 
             vel = [0., 0., 0.],
             angle = -89.0, # Look straight down
             b_ducked = False,
@@ -381,6 +382,10 @@ class Player:
         self.b_on_ground = b_on_ground
         self.floor = floor if floor else Floor(self.pos[2])
         
+        # Teleport player up by 0.03125
+        if self.floor.z == self.pos[2]:
+            self.pos[2] += COORD_RESOLUTION
+        
         self.forward_2D = list(forward_2D)
         self.right_2D = list(right_2D)
         self.grip = grip
@@ -398,6 +403,9 @@ class Player:
     def set_ground_state(self, value):
         if value:
             if self.hook and not self.b_on_ground: self.hook.player_air_to_ground(self)
+            # CGameMovement::SetGroundEntity in shared/gamemovement.cpp
+            if not self.b_on_ground:
+                self.vel[2] = 0.0
             self.b_on_ground = True
             self.unduck_counter = 0
         else:
@@ -440,6 +448,9 @@ class Player:
         # CGameMovement::ReduceTimers
         self.duck_animation += tick_duration
         self.reduck_timer += tick_duration
+        
+        # TODO: Add missing update of eye offset here
+        #       See CGameMovement::PlayerMove in shared/gamemovement
 
         b_duck_pressed = self.key_state['+duck'] > 0
         
@@ -540,10 +551,13 @@ class Player:
     #CGameMovement::PlayerMove
     def simulate_tick(self):
         if self.hook: self.hook.player_before_tick_update(self)
-        if self.vel[2] > 250.0:
+        # CGameMovement::PlayerMove in shared/gamemovement.cpp
+        if False: # TODO should this be false or true? Seems likely false
+            self.categorize_position()
+        elif self.vel[2] > 250.0:
             self.set_ground_state(False)
-
-        if self.hook and 1.0 < self.pos[2] - self.floor.z - 20.0 <= 2.0 and self.b_ducked and self.vel[2] <= 0.0:
+        
+        if self.hook and 0.0 < self.pos[2] - self.floor.z - 20.0 <= 2.0 and self.b_ducked and self.vel[2] <= 0.0:
             self.hook.player_jumpbug_possible(self)
 
         if self.hook: was_ducked_and_in_air_initially = self.b_ducked and not self.b_on_ground
@@ -557,10 +571,9 @@ class Player:
         self.vel[2] = truncate(self.vel[2] - half_grav, -max_vel, max_vel)
         self.vel[0] = truncate(self.vel[0], -max_vel, max_vel)
         self.vel[1] = truncate(self.vel[1], -max_vel, max_vel)
-        
-        if self.hook and self.b_on_ground and 1.0 < self.pos[2] - self.floor.z <= 2.0:
-            if self.b_ducked: self.hook.player_crouched_bounce_possible(self)
-            else: self.hook.player_standing_bounce_possible(self)
+       
+        if self.hook and self.b_on_ground and 1.0 < self.pos[2] - self.floor.z <= 2.0 and not self.b_ducked:
+            self.hook.player_bhop_possible(self)
         
         b_jump_pressed = self.key_state['+jump'] > 0
         b_jump_just_pressed = b_jump_pressed and not self.b_prev_tick_jump_pressed
@@ -577,10 +590,11 @@ class Player:
                         #CTFGameMovement::PreventBunnyJumping in tf/tf_gamemovement
                         speed = sqrt(sum(x**2 for x in self.vel))
                         if speed >= BUNNYJUMP_MAX_SPEED_FACTOR * self.flMaxSpeed:
-                            if self.hook: player_before_bunnyhop_detected(self)
+                            if self.hook: self.hook.player_before_bunnyhop_detected(self)
                             scale = BUNNYJUMP_MAX_SPEED_FACTOR * self.flMaxSpeed / speed
+                            print('Bunny jump happened, scaling down speed to', scale, 'with current vel', self.vel)
                             self.vel = [x * scale for x in self.vel]
-                            if self.hook: player_after_bunnyhop_detected(self)
+                            if self.hook: self.hook.player_after_bunnyhop_detected(self)
                         
                         self.set_ground_state(False)
 
@@ -842,6 +856,10 @@ class Soldier(Player):
         super().simulate_tick()
         if self.hook: self.hook.soldier_before_tick_update(self)
          
+        if self.hook and self.b_on_ground and 1.0 < self.pos[2] - self.floor.z <= 2.0 and self.vel[2] == 0.0: 
+            if self.b_ducked: self.hook.soldier_crouched_bounce_possible(self)
+            else: self.hook.soldier_standing_bounce_possible(self)
+        
         alive_rockets = []
         for rocket in self.active_rockets:
             rocket_exploded, explosion_pos = rocket.simulate_tick()
