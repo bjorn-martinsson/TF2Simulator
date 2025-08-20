@@ -407,7 +407,7 @@ class Player:
             if not self.b_on_ground:
                 self.vel[2] = 0.0
             self.b_on_ground = True
-            self.unduck_counter = 0
+            self.airduck_counter = 0
         else:
             if self.hook and self.b_on_ground: self.hook.player_ground_to_air(self)
             self.b_on_ground = False
