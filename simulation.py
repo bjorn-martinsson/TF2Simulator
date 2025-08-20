@@ -209,8 +209,17 @@ class Hook_Base:
     # Player airmove (i.e. move while in air)
     def player_before_airmove(self, player): pass
     def player_after_airmove(self, player): pass
-
     
+    # Player is in a position to jumpbug
+    def player_jumpbug_possible(self, player): pass
+    # Player is in a position to crouch bounce
+    def player_crouched_bounce_possible(self, player): pass
+    # Player is in a position to standing bounce (bhop)
+    def player_standing_bounce_possible(self, player): pass
+    # Player hit a jump bug
+    def player_jumpbug_detected(self, player): pass
+    # Player hit a bhop
+    def player_bhop_detected(self, player): pass
     """
         Available hooks for the Soldier-class
     """
@@ -240,7 +249,12 @@ class Hook_Base:
     def soldier_before_hit(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
     # Soldier got hit by explosion
     def soldier_after_hit(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
-
+    
+    # Soldier hit speed shot (ducked, grounded and moving at high speed)
+    def soldier_ss_detected(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
+    # Soldier was hit by rocket while being between 1.0 and 2.0 units from floor
+    def soldier_crouched_bounce_detected(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
+    def soldier_standing_bounce_detected(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
 
 
 """
@@ -529,6 +543,10 @@ class Player:
         if self.vel[2] > 250.0:
             self.set_ground_state(False)
 
+        if self.hook and 1.0 < self.pos[2] - self.floor.z - 20.0 <= 2.0 and self.b_ducked and self.vel[2] <= 0.0:
+            self.hook.player_jumpbug_possible(self)
+
+        if self.hook: was_ducked_and_in_air_initially = self.b_ducked and not self.b_on_ground
         self.handle_ducking()
 
         # CTFGameMovement::FullWalkMove in tf/tf_gamemovement
@@ -539,6 +557,10 @@ class Player:
         self.vel[2] = truncate(self.vel[2] - half_grav, -max_vel, max_vel)
         self.vel[0] = truncate(self.vel[0], -max_vel, max_vel)
         self.vel[1] = truncate(self.vel[1], -max_vel, max_vel)
+        
+        if self.hook and self.b_on_ground and 1.0 < self.pos[2] - self.floor.z <= 2.0:
+            if self.b_ducked: self.hook.player_crouched_bounce_possible(self)
+            else: self.hook.player_standing_bounce_possible(self)
         
         b_jump_pressed = self.key_state['+jump'] > 0
         b_jump_just_pressed = b_jump_pressed and not self.b_prev_tick_jump_pressed
@@ -568,6 +590,11 @@ class Player:
                         else:
                             self.vel[2] = truncate(self.vel[2] + jump_speed - half_grav, -max_vel, max_vel)
                         if self.hook: self.hook.player_after_jump(self)
+
+                        if self.hook and was_ducked_and_in_air_initially:
+                            self.hook.player_jumpbug_detected(self)
+                        if self.hook and 1.0 < self.pos[2] - self.floor.z <= 2.0:
+                            self.hook.player_bhop_detected(self)
 
         if self.b_on_ground:
             self.vel[2] = 0.0
@@ -717,20 +744,6 @@ class Player:
             self.pos[i] += self.vel[i] * tick_duration
         if self.pos[2] < self.floor.z:
             self.pos[2] = self.floor.z + COORD_RESOLUTION
-        
-
-        # From reading preview.pdf, I thought this could be the correct collision implementation
-        # But after testing it out, this does not match in-game
-        #
-        #if self.vel[2] < 0.0 and self.pos[2] > self.floor.z and self.pos[2] + self.vel[2] * tick_duration <= self.floor.z:
-        #    dt = (self.floor.z - self.pos[2] - COORD_RESOLUTION) / self.vel[2] if self.vel[2] else 0.0
-        #    assert dt >= 0
-        #    for i in range(3):
-        #        self.pos[i] += self.vel[i] * dt
-        #else:
-        #    for i in range(3):
-        #        self.pos[i] += self.vel[i] * tick_duration
-        
         
         # Homemade float rounding to mimic true tf2 behaviour
         if float_mode:
@@ -906,8 +919,18 @@ class Soldier(Player):
         explosion_dir = [(center_pos[i] - explosion_pos[i]) for i in range(3)]
         scale = sqrt(sum(x**2 for x in explosion_dir))
         explosion_dir = [x / scale for x in explosion_dir]
-        
+       
+        if self.hook: vspeed_before_explosion = self.vel[2]
+        if self.hook: hspeed_before_explosion = sqrt(sum(self.vel[i]**2 for i in range(2)))
         if self.hook: self.hook.soldier_before_hit(self, explosion_dir, modified_damage, explosion_pos)
         for i in range(3):
             self.vel[i] += explosion_dir[i] * modified_damage
         if self.hook: self.hook.soldier_after_hit(self, explosion_dir, modified_damage, explosion_pos)
+        
+        if self.hook: 
+            hit_ss = self.b_on_ground and self.b_ducked and self.vel[2] > 0.0 and vspeed_before_explosion == 0.0 and hspeed_before_explosion > 1.2 * self.flMaxSpeed 
+            if hit_ss: self.hook.soldier_ss_detected(self, explosion_dir, modified_damage, explosion_pos)
+        
+        if self.hook and self.b_on_ground and 1.0 < self.pos[2] - self.floor.z <= 2.0 and self.vel[2] > 0.0: 
+            if self.b_ducked: self.hook.soldier_crouched_bounce_detected(self, explosion_dir, modified_damage, explosion_pos)
+            else: self.hook.soldier_standing_bounce_detected(self, explosion_dir, modified_damage, explosion_pos)
