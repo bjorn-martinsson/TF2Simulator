@@ -51,7 +51,7 @@ def visualize(player_pos, rocket_positions = {}, rocket_explosions = {}):
     ax.view_init(azim=-90, elev=0)#, elev=30)
     
     # Moving ball
-    ball, = ax.plot([], [], [], 'ro', markersize=8)
+    ball, = ax.plot([], [], [], 'co', markersize=8)
 
     def init():
         ball.set_data([], [])
