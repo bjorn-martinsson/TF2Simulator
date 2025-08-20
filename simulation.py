@@ -592,7 +592,6 @@ class Player:
                         if speed >= BUNNYJUMP_MAX_SPEED_FACTOR * self.flMaxSpeed:
                             if self.hook: self.hook.player_before_bunnyhop_detected(self)
                             scale = BUNNYJUMP_MAX_SPEED_FACTOR * self.flMaxSpeed / speed
-                            print('Bunny jump happened, scaling down speed to', scale, 'with current vel', self.vel)
                             self.vel = [x * scale for x in self.vel]
                             if self.hook: self.hook.player_after_bunnyhop_detected(self)
                         
