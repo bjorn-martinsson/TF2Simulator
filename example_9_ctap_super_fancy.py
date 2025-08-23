@@ -82,11 +82,11 @@ for tick in range(456):
 
 
     if tick == 298:
-        my_key_state.press_key('+backward', 1.0)
+        my_key_state.press_key('+back', 1.0)
     if tick == 299:
-        my_key_state.press_key('+backward', 1.0)
+        my_key_state.press_key('+back', 1.0)
     if tick == 305:
-        my_key_state.release_key('+backward')
+        my_key_state.release_key('+back')
 
     if tick == 325:
         my_key_state.press_key('+attack')

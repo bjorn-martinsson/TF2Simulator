@@ -92,8 +92,8 @@ class Floor:
 """
 
 available_keys = {
-    "+forward", "+backward",
-    "+move_left", "+move_right",
+    "+forward", "+back",
+    "+moveleft", "+moveright",
     "+moveup", "+movedown",
     "+jump", "+duck",
     "+attack", "shotgun"
@@ -635,9 +635,9 @@ class Player:
 
     def get_wish_speed(self):
         # CInput::ComputeForwardMove in client/in_main.cpp
-        forward_wish =  cl_forwardspeed * self.key_state['+forward'] - cl_backspeed * self.key_state['+backward']
+        forward_wish =  cl_forwardspeed * self.key_state['+forward'] - cl_backspeed * self.key_state['+back']
         # CInput::ComputeSideMove in client/in_main.cpp
-        side_wish = cl_sidespeed * self.key_state['+move_right'] - cl_sidespeed * self.key_state['+move_left']
+        side_wish = cl_sidespeed * self.key_state['+moveright'] - cl_sidespeed * self.key_state['+moveleft']
         # CInput::ComputeUpwardMove in client/in_main.cpp
         up_wish = cl_upspeed * self.key_state['+moveup'] - cl_upspeed * self.key_state['+movedown']
       
