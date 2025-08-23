@@ -248,7 +248,7 @@ class Hook_Base:
     # Soldier got hit by explosion
     def soldier_after_hit(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
     
-    # Soldier hit speed shot (ducked, grounded and moving at high speed)
+    # Soldier hit speed shot (hit by rocket same tick as landing)
     def soldier_ss_detected(self, soldier, explosion_dir, modified_damage, explosion_pos): pass
     # Soldier is in a position to bounce with a rocket
     def soldier_crouched_bounce_possible(self, player): pass
@@ -405,6 +405,7 @@ class Player:
             if self.hook and not self.b_on_ground: self.hook.player_air_to_ground(self)
             # CGameMovement::SetGroundEntity in shared/gamemovement.cpp
             if not self.b_on_ground:
+                if self.hook: self.hook.landed_this_tick = True
                 self.vel[2] = 0.0
             self.b_on_ground = True
             self.airduck_counter = 0
@@ -550,6 +551,7 @@ class Player:
     
     #CGameMovement::PlayerMove
     def simulate_tick(self):
+        if self.hook: self.hook.landed_this_tick = False
         if self.hook: self.hook.player_before_tick_update(self)
         # CGameMovement::PlayerMove in shared/gamemovement.cpp
         if False: # TODO should this be false or true? Seems likely false
@@ -944,10 +946,9 @@ class Soldier(Player):
             self.vel[i] += explosion_dir[i] * modified_damage
         if self.hook: self.hook.soldier_after_hit(self, explosion_dir, modified_damage, explosion_pos)
         
-        if self.hook: 
-            hit_ss = self.b_on_ground and self.b_ducked and self.vel[2] > 0.0 and vspeed_before_explosion == 0.0 and hspeed_before_explosion > 1.2 * self.flMaxSpeed 
+        if self.hook:
+            hit_ss = self.b_on_ground and self.hook.landed_this_tick and self.vel[2] > 0.0 and vspeed_before_explosion == 0.0
             if hit_ss: self.hook.soldier_ss_detected(self, explosion_dir, modified_damage, explosion_pos)
-        
         if self.hook and self.b_on_ground and 1.0 < self.pos[2] - self.floor.z <= 2.0 and self.vel[2] > 0.0: 
             if self.b_ducked: self.hook.soldier_crouched_bounce_detected(self, explosion_dir, modified_damage, explosion_pos)
             else: self.hook.soldier_standing_bounce_detected(self, explosion_dir, modified_damage, explosion_pos)
